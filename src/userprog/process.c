@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -37,9 +38,23 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+  /* Add */
+  /* Tokenize and parse argument. */
+  char *save_ptr;
+  char *proc_name;
+  proc_name = malloc(strlen(file_name)+1);
+  strlcpy (proc_name, file_name, strlen(file_name));
+  /* Get the first token. */
+  proc_name = strtok_r(proc_name, " ", &save_ptr);
+
+  if (proc_name == NULL)
+    return -1;
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (proc_name, PRI_DEFAULT, start_process, fn_copy);
+  /* Free memory. */
+  free(proc_name);
+  /* Add */
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -88,7 +103,10 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  /* Add */
+  timer_msleep(5000);
+  return(-1);
+  /* Add */
 }
 
 /* Free the current process's resources. */
@@ -195,7 +213,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp, int argc, char * argv[]);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -221,11 +239,24 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  /* Add */
+  /* Set up stack. */
+  // Tokenize cmd to get arguments.
+  char *token, *save_ptr;
+  char *argv[25];
+  int argc = 0;
+
+  for(token = strtok_r((char *) file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr))
+  {
+    argv[argc] = token;
+    argc ++;
+  }
+  /* Add */
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (argv[0]);  // Modify to argv[0]
   if (file == NULL) 
     {
-      printf ("load: %s: open failed\n", file_name);
+      printf ("load: %s: open failed\n", argv[0]);  // Modify to argv[0]
       goto done; 
     }
 
@@ -238,7 +269,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
-      printf ("load: %s: error loading executable\n", file_name);
+      printf ("load: %s: error loading executable\n", argv[0]); // Modify to argv[0]
       goto done; 
     }
 
@@ -302,7 +333,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, argc, argv)) // Modify arguments
     goto done;
 
   /* Start address. */
@@ -427,7 +458,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp, int argc, char *argv[]) 
 {
   uint8_t *kpage;
   bool success = false;
@@ -437,7 +468,41 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE-12;
+        {
+          /* Add */
+          *esp = PHYS_BASE;
+          // List of addresses to the values which added to stack
+          uint32_t * address[argc];
+          for (int i = argc - 1; i >=0; i--)
+          {
+            *esp = *esp - (strlen(argv[i]+1))*sizeof(char);
+            // Set the pointer value to address[]
+            address[i] = (uint32_t *) *esp;
+            // In the space that pointer point to, save the argument value
+            memcpy(*esp, argv[i], strlen(argv[i])+1);
+          }
+          // Space for null sential
+          *esp = *esp - 4;
+          (*(int *)(*esp)) = 0;
+
+          // Push into stack the address of arguments
+          *esp = *esp - 4;
+          for (int i = argc - 1; i >= 0; i--)
+          {
+            (*(uint32_t **)(*esp)) = address[i];
+            *esp = *esp - 4;
+          }
+          // Push into stack pointer value that point to the pointer of first argument
+          (*(uintptr_t **)(*esp)) = *esp + 4;
+          // Push into stack argc value
+          *esp = *esp - 4;
+          *(int *)(*esp) = argc;
+          // Push into the stack fake return address
+          *esp = *esp - 4;
+          (*(int *)(*esp)) = 0;
+
+          /* Add */
+        }
       else
         palloc_free_page (kpage);
     }

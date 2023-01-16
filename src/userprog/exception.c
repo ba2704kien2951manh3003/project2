@@ -142,7 +142,13 @@ page_fault (struct intr_frame *f)
 
   /* Count page faults. */
   page_fault_cnt++;
-
+  /* Add */
+  if (!not_present)
+   exit(-1);
+  if (fault_addr == NULL || !check_ptr(fault_addr)
+   || !pagedir_get_page(thread_current()->pagedir, fault_addr))
+   exit(-1);
+  /* Add */
   /* Determine cause. */
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;

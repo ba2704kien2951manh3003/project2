@@ -92,10 +92,14 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-
+    /* Add */
+    struct list file_descriptors;
+    int cur_fd;
+    /* Add */
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    
 #endif
 
     /* Owned by thread.c. */
