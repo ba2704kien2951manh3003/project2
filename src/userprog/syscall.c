@@ -8,15 +8,22 @@
 
 // System call to exit terminated process
 void syscall_init(void);
-
 static void syscall_handler(struct intr_frame *f);
 void get_args(struct intr_frame *f, int argc, int *args);
 bool check_ptr(const void *ptr);
 void exit(int);
 
 
+//////////////////////////////////////////////////////////////
 void syscall_init(void){
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
+}
+
+bool check_ptr(const void *ptr){
+  if (ptr == NULL || !is_user_vaddr(ptr) || pagedir_get_page(thread_current()->pagedir, ptr) == NULL)
+    return false;
+
+  return true;
 }
 
 static void syscall_handler(struct intr_frame *f){
@@ -49,20 +56,6 @@ static void syscall_handler(struct intr_frame *f){
   }
 }
 
-
-void exit(int status){
-  printf("\n%s: exit(%d)\n\n", thread_current()->name, status);
-  thread_exit();
-}
-
-bool check_ptr(const void *ptr){
-  if (ptr == NULL || !is_user_vaddr(ptr) || pagedir_get_page(thread_current()->pagedir, ptr) == NULL)
-    return false;
-
-  return true;
-}
-
-
 void get_args(struct intr_frame *f, int argc, int *args){
   if((argc < 1)||(argc > 3))
     exit(-1);
@@ -74,4 +67,9 @@ void get_args(struct intr_frame *f, int argc, int *args){
       check_ptr((const void *) ptr);
       args[i] = *ptr;
     }
+}
+
+void exit(int status){
+  printf("\n%s: exit(%d)\n\n", thread_current()->name, status);
+  thread_exit();
 }
